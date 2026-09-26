@@ -37,4 +37,4 @@ O código de domínio está em `src/finance.js`, persistência e migração em `
 7. Proteção opcional do backup, testes mobile e acessibilidade ampliada.
 8. IA opcional conectada apenas aos resultados calculados, com revisão explícita antes de gravações.
 
-O README original descreve o produto completo; os itens acima distinguem a versão entregue da visão futura.
+Este documento distingue a versão entregue da visão completa fornecida no planejamento inicial.
