@@ -8,17 +8,18 @@ export const today = () => new Date().toLocaleDateString('en-CA');
 export const dateAdd = (iso, days) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0,10); };
 export const monthAdd = (iso, months) => { const [y,m,d] = iso.split('-').map(Number); const first = new Date(Date.UTC(y,m-1+months,1,12)); const last = new Date(Date.UTC(first.getUTCFullYear(),first.getUTCMonth()+1,0,12)).getUTCDate(); first.setUTCDate(Math.min(d,last)); return first.toISOString().slice(0,10); };
 export const uid = () => crypto.randomUUID();
-export const initial = () => ({schema:1, accounts:[], transactions:[], installments:[], debts:[], goals:[], assets:[], investments:[], operations:[], quotes:[], areas:[], strategies:[], scenarios:[], reconciliations:[], audit:[], settings:{}});
+export const initial = () => ({schema:2, accounts:[], cards:[], transactions:[], installments:[], debts:[], goals:[], assets:[], investments:[], operations:[], quotes:[], areas:[], strategies:[], scenarios:[], reconciliations:[], audit:[], settings:{}});
 export function migrate(raw) {
-  if (!raw || typeof raw !== 'object' || (raw.schema || 1) > 1) throw new Error('Backup incompatível.');
+  if (!raw || typeof raw !== 'object' || (raw.schema || 1) > 2) throw new Error('Backup incompatível.');
   const base = initial();
   for (const key of Object.keys(base)) if (raw[key] !== undefined) base[key] = raw[key];
   for (const key of Object.keys(base).filter(k => Array.isArray(base[k]))) if (!Array.isArray(base[key])) throw new Error(`Dados inválidos: ${key}`);
+  base.schema=2;
   return base;
 }
 export const accountBalance = (state, id) => (state.accounts.find(a=>a.id===id)?.opening || 0) + state.transactions.filter(t=>t.status==='realized' && t.accountId===id).reduce((sum,t)=>sum + (t.type==='income'||t.type==='transfer-in' ? t.amount : -t.amount),0);
 export const cash = state => state.accounts.filter(a=>a.kind!=='investment').reduce((s,a)=>s+accountBalance(state,a.id),0);
-export const totalDebt = state => state.debts.reduce((s,d)=>s+d.balance,0);
+export const totalDebt = state => state.debts.reduce((s,d)=>s+d.balance,0)+state.installments.reduce((sum,item)=>sum+Array.from({length:item.count},(_,index)=>item.paid?.includes(index)?0:Math.floor(item.total/item.count)+(index<item.total%item.count?1:0)).reduce((a,b)=>a+b,0),0);
 export function positions(state) {
   return state.investments.map(asset => {
     const ops = state.operations.filter(o=>o.assetId===asset.id).sort((a,b)=>a.date.localeCompare(b.date));
@@ -76,6 +77,17 @@ export function events(state, from=today(), until=monthAdd(from,12)) {
     }
   }
   return out.sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
+}
+export function invoices(state, cardId) {
+  const groups=new Map();
+  for(const item of state.installments.filter(i=>i.cardId===cardId))for(let index=0;index<item.count;index++){
+    if(item.paid?.includes(index))continue;
+    const date=monthAdd(item.firstDate,index),key=date.slice(0,7),amount=Math.floor(item.total/item.count)+(index<item.total%item.count?1:0);
+    const invoice=groups.get(key)||{month:key,date,amount:0,lines:[]};
+    invoice.date=date>invoice.date?date:invoice.date;invoice.amount+=amount;
+    invoice.lines.push({itemId:item.id,index,amount,description:item.description});groups.set(key,invoice);
+  }
+  return [...groups.values()].sort((a,b)=>a.month.localeCompare(b.month));
 }
 export function projection(state, from=today(), until=monthAdd(from,6), additions=[]) {
   let balance=cash(state), minimum=balance;

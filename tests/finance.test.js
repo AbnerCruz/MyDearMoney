@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initial,accountBalance,cash,netWorth,monthlyFlow,events,projection,positions,recurringDates,distribute,monthAdd} from '../src/finance.js';
+import {initial,accountBalance,cash,netWorth,totalDebt,monthlyFlow,events,invoices,projection,positions,recurringDates,distribute,monthAdd,migrate} from '../src/finance.js';
 
 test('transferência conserva o patrimônio e não entra no fluxo',()=>{
  const s=initial();s.accounts=[{id:'a',opening:100000},{id:'b',opening:20000}];
@@ -31,4 +31,16 @@ test('cenário e distribuição não mutam o estado real',()=>{
 test('dívida interrompe parcelas quando saldo é quitado',()=>{
  const s=initial();s.debts=[{id:'d',name:'Dívida',balance:10000,payment:6000,monthlyRate:0,dueDate:'2026-01-10'}];
  const e=events(s,'2026-01-01','2026-12-31');assert.deepEqual(e.map(x=>[x.date,x.amount]),[['2026-01-10',-6000],['2026-02-10',-4000]]);
+});
+test('fatura agrupa parcelas, quitação reduz passivo e não duplica projeção',()=>{
+ const s=initial();s.accounts=[{id:'a',opening:100000}];s.cards=[{id:'c',name:'Cartão',limit:50000,accountId:'a'}];
+ s.installments=[{id:'p',cardId:'c',description:'Notebook',total:30001,count:3,firstDate:'2026-01-10',accountId:'a',paid:[]},{id:'q',cardId:'c',description:'Livro',total:1000,count:1,firstDate:'2026-01-10',accountId:'a',paid:[]}];
+ assert.equal(invoices(s,'c')[0].amount,11001);assert.equal(totalDebt(s),31001);assert.equal(netWorth(s),68999);
+ const invoice=invoices(s,'c')[0];for(const line of invoice.lines)s.installments.find(i=>i.id===line.itemId).paid.push(line.index);
+ s.transactions.push({id:'payment',type:'expense',amount:invoice.amount,accountId:'a',status:'realized',date:'2026-01-10'});
+ assert.equal(totalDebt(s),20000);assert.equal(netWorth(s),68999);assert.equal(events(s,'2026-01-01','2026-01-31').length,0);
+});
+test('migrar documento anterior adiciona cartões sem perder contas',()=>{
+ const previous={schema:1,accounts:[{id:'a',opening:100}]};const next=migrate(previous);
+ assert.equal(next.schema,2);assert.deepEqual(next.cards,[]);assert.equal(next.accounts[0].opening,100);
 });
