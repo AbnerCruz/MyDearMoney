@@ -5,6 +5,7 @@ Aplicativo web/PWA de finanças pessoais, local-first e sem conta obrigatória. 
 ## Funciona nesta versão (v0.1)
 
 - Contas com saldo inicial, entradas, saídas, transferências vinculadas e histórico pesquisável.
+- Interface com quatro destinos principais (Início, Histórico, Futuro e Mais). O registro comum pede apenas valor e categoria; conta, data, recorrência e estado ficam em “Mais opções”.
 - Movimentações realizadas ou planejadas; recorrências diárias, semanais, quinzenais e de 1, 2, 3, 6 ou 12 meses, com data final opcional.
 - Compras parceladas e cartões com faturas agrupadas e pagamento registrado; dívidas com projeção de juros mensais, amortização registrada, objetivos e bens.
 - Carteira com compra, venda, rendimentos, custo médio, resultado realizado e não realizado. A operação lança o fluxo correspondente na conta selecionada. Preço manual ou consulta brapi para classes da B3, com data e cache local.
