@@ -1,6 +1,6 @@
 import {initial,migrate,uid} from './finance.js';
 
-const DB='mydearmoney', VERSION=2;
+const DB='mydearmoney', VERSION=3;
 function open() { return new Promise((resolve,reject)=>{
   const req=indexedDB.open(DB,VERSION);
   req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('documents')) req.result.createObjectStore('documents');};
@@ -17,5 +17,5 @@ export async function mutate(state,action,entity,detail={}) {
   state.audit.push({id:uid(),at:new Date().toISOString(),action,entity,detail});
   await save(state); return state;
 }
-export function backup(state) {return JSON.stringify({format:'MyDearMoney',version:2,exportedAt:new Date().toISOString(),data:state},null,2);}
-export function restore(text) {const raw=JSON.parse(text); if(raw.format!=='MyDearMoney'||![1,2].includes(raw.version)) throw new Error('Formato de backup não reconhecido.'); return migrate(raw.data);}
+export function backup(state) {return JSON.stringify({format:'MyDearMoney',version:3,exportedAt:new Date().toISOString(),data:state},null,2);}
+export function restore(text) {const raw=JSON.parse(text); if(raw.format!=='MyDearMoney'||![1,2,3].includes(raw.version)) throw new Error('Formato de backup não reconhecido.'); return migrate(raw.data);}

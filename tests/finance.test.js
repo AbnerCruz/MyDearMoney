@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initial,accountBalance,cash,netWorth,totalDebt,monthlyFlow,events,invoices,projection,positions,recurringDates,distribute,monthAdd,migrate} from '../src/finance.js';
+import {initial,accountBalance,cash,benefitBalance,netWorth,totalDebt,monthlyFlow,events,invoices,cardDueDate,salaryEstimate,subscriptionOccurrences,projection,positions,recurringDates,distribute,monthAdd,migrate,today} from '../src/finance.js';
+import {backup,restore} from '../src/storage.js';
 
 test('transferência conserva o patrimônio e não entra no fluxo',()=>{
  const s=initial();s.accounts=[{id:'a',opening:100000},{id:'b',opening:20000}];
@@ -42,5 +43,42 @@ test('fatura agrupa parcelas, quitação reduz passivo e não duplica projeção
 });
 test('migrar documento anterior adiciona cartões sem perder contas',()=>{
  const previous={schema:1,accounts:[{id:'a',opening:100}]};const next=migrate(previous);
- assert.equal(next.schema,2);assert.deepEqual(next.cards,[]);assert.equal(next.accounts[0].opening,100);
+ assert.equal(next.schema,3);assert.deepEqual(next.cards,[]);assert.deepEqual(next.subscriptions,[]);assert.equal(next.accounts[0].opening,100);
+});
+test('vale-alimentação permanece separado do dinheiro e da renda em conta',()=>{
+ const s=initial();s.accounts=[{id:'bank',kind:'checking',opening:100000},{id:'va',kind:'benefit',opening:20000}];
+ s.transactions=[{id:'credit',accountId:'va',type:'income',amount:30000,status:'realized',date:'2026-09-01'},{id:'food',accountId:'va',type:'expense',amount:5000,status:'realized',date:'2026-09-02'}];
+ assert.equal(cash(s),100000);assert.equal(benefitBalance(s),45000);assert.equal(netWorth(s),100000);assert.deepEqual(monthlyFlow(s,'2026-09'),{income:0,expense:0});
+ s.transactions.push({id:'future',accountId:'va',type:'expense',amount:5000,status:'planned',date:'2026-10-01'});
+ assert.equal(projection(s,'2026-09-27','2026-10-31').end,100000);
+});
+test('cartão calcula o primeiro vencimento por fechamento e vencimento',()=>{
+ const card={closingDay:25,dueDay:5};assert.equal(cardDueDate(card,'2026-09-20'),'2026-10-05');assert.equal(cardDueDate(card,'2026-09-26'),'2026-11-05');
+ assert.equal(cardDueDate({closingDay:10,dueDay:20},'2026-09-09'),'2026-09-20');
+});
+test('assinatura no cartão aparece na fatura e some após um pagamento',()=>{
+ const s=initial();s.cards=[{id:'c',closingDay:25,dueDay:5,accountId:'bank'}];s.subscriptions=[{id:'sub',name:'Streaming',amount:2990,firstDate:'2026-09-20',cardId:'c',accountId:'bank',paid:[],active:true}];
+ const due=subscriptionOccurrences(s,s.subscriptions[0],'2026-11-30');assert.deepEqual(due.map(x=>x.date),['2026-10-05','2026-11-05']);
+ s.subscriptions[0].paid.push('2026-09-20');assert.deepEqual(subscriptionOccurrences(s,s.subscriptions[0],'2026-10-31'),[]);
+ s.subscriptions[0].paid=[];s.subscriptions[0].active=false;s.subscriptions[0].cancelDate='2026-09-27';
+ assert.deepEqual(subscriptionOccurrences(s,s.subscriptions[0],'2026-10-31').map(x=>x.date),['2026-10-05']);
+});
+test('salário por hora permite adicional percentual e descontos',()=>{
+ assert.deepEqual(salaryEstimate({hourlyCents:1239,hours:220,extraPercent:20,deductionPercent:12,fixedDeductions:14000}),{gross:327096,net:273844,deductions:53252});
+});
+test('assinatura já cobrada entra uma vez na fatura e desaparece após pagamento',()=>{
+ const s=initial(),charge=today();s.cards=[{id:'c',closingDay:25,dueDay:5,accountId:'bank'}];
+ s.subscriptions=[{id:'s',name:'IA',amount:9500,firstDate:charge,cardId:'c',accountId:'bank',paid:[],active:true}];
+ assert.equal(invoices(s,'c')[0].amount,9500);
+ assert.equal(totalDebt(s),9500);
+ s.subscriptions[0].paid.push(charge);
+ assert.deepEqual(invoices(s,'c'),[]);
+ assert.equal(totalDebt(s),0);
+ assert.equal(events(s,charge,cardDueDate(s.cards[0],charge)).filter(e=>e.label==='IA').length,0);
+});
+test('backup v3 restaura assinaturas e aceita backup v2',()=>{
+ const s=initial();s.subscriptions.push({id:'s',name:'Teste',amount:1000,paid:[]});
+ assert.equal(restore(backup(s)).subscriptions[0].name,'Teste');
+ const old=restore(JSON.stringify({format:'MyDearMoney',version:2,data:{schema:2,accounts:[{id:'a',opening:500}]}}));
+ assert.equal(old.schema,3);assert.deepEqual(old.subscriptions,[]);assert.equal(old.accounts[0].opening,500);
 });
