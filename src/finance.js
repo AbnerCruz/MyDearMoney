@@ -96,7 +96,14 @@ export function events(state, from=today(), until=monthAdd(from,12)) {
   }
   for(const adjustment of state.cardAdjustments) if(!adjustment.paid&&adjustment.date<=until) out.push({id:adjustment.id,date:adjustment.date<from?from:adjustment.date,label:adjustment.description,amount:-adjustment.amount,source:'ajuste de fatura',accountId:state.cards.find(c=>c.id===adjustment.cardId)?.accountId});
   for(const subscription of state.subscriptions)for(const occurrence of subscriptionOccurrences(state,subscription,until))if(occurrence.date>=from||subscription.cardId)out.push({id:`${subscription.id}:${occurrence.chargeDate}`,date:occurrence.date<from?from:occurrence.date,label:subscription.name,amount:-subscription.amount,source:subscription.cardId?'pagamento recorrente no cartão':'pagamento recorrente',accountId:occurrence.accountId});
-  for(const debt of state.debts) if(debt.payment>0&&debt.dueDate) {
+  for(const debt of state.debts) if(debt.mode==='installments'&&debt.remainingCount>0&&debt.dueDate){
+    for(let i=0;i<debt.remainingCount;i++){
+      const due=monthAdd(debt.dueDate,i);if(due>until)break;
+      const amount=Math.min(debt.installmentAmount,Math.max(0,debt.balance-debt.installmentAmount*i));
+      if(amount>0)out.push({id:`${debt.id}:${i}`,date:due<from?from:due,label:`${debt.name} · ${i+1}/${debt.remainingCount}${due<from?' (em atraso)':''}`,amount:-amount,source:'parcela de empréstimo',accountId:debt.accountId});
+    }
+  }
+  for(const debt of state.debts) if(debt.mode!=='installments'&&debt.payment>0&&debt.dueDate) {
     let left=debt.balance; let date=debt.dueDate;
     for(let i=0;i<240&&date<=until&&left>0;i++,date=monthAdd(debt.dueDate,i)) {
       const interest=Math.round(left*(debt.monthlyRate||0)/100); const amount=Math.min(debt.payment,left+interest);

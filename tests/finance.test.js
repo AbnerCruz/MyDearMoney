@@ -33,6 +33,16 @@ test('dívida interrompe parcelas quando saldo é quitado',()=>{
  const s=initial();s.debts=[{id:'d',name:'Dívida',balance:10000,payment:6000,monthlyRate:0,dueDate:'2026-01-10'}];
  const e=events(s,'2026-01-01','2026-12-31');assert.deepEqual(e.map(x=>[x.date,x.amount]),[['2026-01-10',-6000],['2026-02-10',-4000]]);
 });
+test('empréstimo cadastrado por parcelas projeta apenas o que falta, sem descontar o já pago',()=>{
+ const s=initial();s.accounts=[{id:'bank',opening:300000}];
+ s.debts=[{id:'loan',mode:'installments',name:'Empréstimo',balance:240000,installmentAmount:40000,remainingCount:6,paidCount:4,paidAmount:160000,dueDate:'2026-10-10',accountId:'bank'}];
+ assert.equal(totalDebt(s),240000);assert.equal(accountBalance(s,'bank'),300000);
+ assert.deepEqual(events(s,'2026-09-27','2027-03-31').filter(e=>e.source==='parcela de empréstimo').map(e=>e.amount),Array(6).fill(-40000));
+ s.debts[0].balance=120000;s.debts[0].remainingCount=3;s.debts[0].installmentAmount=40000;s.debts[0].amortizedTotal=100000;
+ s.transactions.push({id:'amortization',type:'expense',amount:100000,accountId:'bank',status:'realized',date:'2026-09-27'});
+ assert.equal(totalDebt(s),120000);assert.equal(accountBalance(s,'bank'),200000);
+ assert.equal(events(s,'2026-09-27','2027-03-31').filter(e=>e.source==='parcela de empréstimo').length,3);
+});
 test('fatura agrupa parcelas, quitação reduz passivo e não duplica projeção',()=>{
  const s=initial();s.accounts=[{id:'a',opening:100000}];s.cards=[{id:'c',name:'Cartão',limit:50000,accountId:'a'}];
  s.installments=[{id:'p',cardId:'c',description:'Notebook',total:30001,count:3,firstDate:'2026-01-10',accountId:'a',paid:[]},{id:'q',cardId:'c',description:'Livro',total:1000,count:1,firstDate:'2026-01-10',accountId:'a',paid:[]}];
