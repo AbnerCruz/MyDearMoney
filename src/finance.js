@@ -8,19 +8,19 @@ export const today = () => new Date().toLocaleDateString('en-CA');
 export const dateAdd = (iso, days) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0,10); };
 export const monthAdd = (iso, months) => { const [y,m,d] = iso.split('-').map(Number); const first = new Date(Date.UTC(y,m-1+months,1,12)); const last = new Date(Date.UTC(first.getUTCFullYear(),first.getUTCMonth()+1,0,12)).getUTCDate(); first.setUTCDate(Math.min(d,last)); return first.toISOString().slice(0,10); };
 export const uid = () => crypto.randomUUID();
-export const initial = () => ({schema:3, accounts:[], cards:[], subscriptions:[], transactions:[], installments:[], debts:[], goals:[], assets:[], investments:[], operations:[], quotes:[], areas:[], strategies:[], scenarios:[], reconciliations:[], audit:[], settings:{}});
+export const initial = () => ({schema:4, accounts:[], cards:[], subscriptions:[], transactions:[], installments:[], cardAdjustments:[], debts:[], goals:[], assets:[], investments:[], operations:[], quotes:[], areas:[], strategies:[], scenarios:[], reconciliations:[], audit:[], settings:{}});
 export function migrate(raw) {
-  if (!raw || typeof raw !== 'object' || (raw.schema || 1) > 3) throw new Error('Backup incompatível.');
+  if (!raw || typeof raw !== 'object' || (raw.schema || 1) > 4) throw new Error('Backup incompatível.');
   const base = initial();
   for (const key of Object.keys(base)) if (raw[key] !== undefined) base[key] = raw[key];
   for (const key of Object.keys(base).filter(k => Array.isArray(base[k]))) if (!Array.isArray(base[key])) throw new Error(`Dados inválidos: ${key}`);
-  base.schema=3;
+  base.schema=4;
   return base;
 }
 export const accountBalance = (state, id) => (state.accounts.find(a=>a.id===id)?.opening || 0) + state.transactions.filter(t=>t.status==='realized' && t.accountId===id).reduce((sum,t)=>sum + (t.type==='income'||t.type==='transfer-in' ? t.amount : -t.amount),0);
 export const cash = state => state.accounts.filter(a=>!['investment','benefit'].includes(a.kind)).reduce((s,a)=>s+accountBalance(state,a.id),0);
 export const benefitBalance = state => state.accounts.filter(a=>a.kind==='benefit').reduce((s,a)=>s+accountBalance(state,a.id),0);
-export const totalDebt = state => state.debts.reduce((s,d)=>s+d.balance,0)+state.installments.reduce((sum,item)=>sum+Array.from({length:item.count},(_,index)=>item.paid?.includes(index)?0:Math.floor(item.total/item.count)+(index<item.total%item.count?1:0)).reduce((a,b)=>a+b,0),0)+state.subscriptions.filter(s=>s.cardId).reduce((sum,sub)=>sum+subscriptionOccurrences(state,sub,monthAdd(today(),2)).filter(o=>o.chargeDate<=today()).reduce((a,o)=>a+o.amount,0),0);
+export const totalDebt = state => state.debts.reduce((s,d)=>s+d.balance,0)+state.installments.reduce((sum,item)=>sum+Array.from({length:item.count},(_,index)=>item.paid?.includes(index)?0:Math.floor(item.total/item.count)+(index<item.total%item.count?1:0)).reduce((a,b)=>a+b,0),0)+state.cardAdjustments.filter(a=>!a.paid).reduce((s,a)=>s+a.amount,0)+state.subscriptions.filter(s=>s.cardId).reduce((sum,sub)=>sum+subscriptionOccurrences(state,sub,monthAdd(today(),2)).filter(o=>o.chargeDate<=today()).reduce((a,o)=>a+o.amount,0),0);
 export function positions(state) {
   return state.investments.map(asset => {
     const ops = state.operations.filter(o=>o.assetId===asset.id).sort((a,b)=>a.date.localeCompare(b.date));
@@ -90,11 +90,12 @@ export function events(state, from=today(), until=monthAdd(from,12)) {
     for(const date of recurringDates(t,from,until)) if(!state.transactions.some(o=>o.parentId===t.id&&o.date===date)) out.push({id:`${t.id}:${date}`,date,label:t.description||t.category||'Recorrência',amount:t.type==='income'?t.amount:-t.amount,source:'recorrência',accountId:t.accountId});
   }
   for(const item of state.installments) for(let i=0;i<item.count;i++) {
-    const date=monthAdd(item.firstDate,i); if(date<from||date>until||item.paid?.includes(i)) continue;
+    const date=monthAdd(item.firstDate,i); if(date>until||item.paid?.includes(i)) continue;
     const amount=Math.floor(item.total/item.count)+(i<item.total%item.count?1:0);
-    out.push({id:`${item.id}:${i}`,date,label:`${item.description} · ${i+1}/${item.count}`,amount:-amount,source:item.cardId?'cartão':'parcela',accountId:item.accountId});
+    out.push({id:`${item.id}:${i}`,date:date<from?from:date,label:`${item.description} · ${i+1}/${item.count}${date<from?' (em atraso)':''}`,amount:-amount,source:item.cardId?'cartão':'parcela',accountId:item.accountId});
   }
-  for(const subscription of state.subscriptions)for(const occurrence of subscriptionOccurrences(state,subscription,until))if(occurrence.date>=from)out.push({id:`${subscription.id}:${occurrence.chargeDate}`,date:occurrence.date,label:subscription.name,amount:-subscription.amount,source:subscription.cardId?'assinatura no cartão':'assinatura',accountId:occurrence.accountId});
+  for(const adjustment of state.cardAdjustments) if(!adjustment.paid&&adjustment.date<=until) out.push({id:adjustment.id,date:adjustment.date<from?from:adjustment.date,label:adjustment.description,amount:-adjustment.amount,source:'ajuste de fatura',accountId:state.cards.find(c=>c.id===adjustment.cardId)?.accountId});
+  for(const subscription of state.subscriptions)for(const occurrence of subscriptionOccurrences(state,subscription,until))if(occurrence.date>=from||subscription.cardId)out.push({id:`${subscription.id}:${occurrence.chargeDate}`,date:occurrence.date<from?from:occurrence.date,label:subscription.name,amount:-subscription.amount,source:subscription.cardId?'pagamento recorrente no cartão':'pagamento recorrente',accountId:occurrence.accountId});
   for(const debt of state.debts) if(debt.payment>0&&debt.dueDate) {
     let left=debt.balance; let date=debt.dueDate;
     for(let i=0;i<240&&date<=until&&left>0;i++,date=monthAdd(debt.dueDate,i)) {
@@ -113,13 +114,18 @@ export function invoices(state, cardId) {
     const date=monthAdd(item.firstDate,index),key=date.slice(0,7),amount=Math.floor(item.total/item.count)+(index<item.total%item.count?1:0);
     const invoice=groups.get(key)||{month:key,date,amount:0,lines:[]};
     invoice.date=date>invoice.date?date:invoice.date;invoice.amount+=amount;
-    invoice.lines.push({itemId:item.id,index,amount,description:item.description});groups.set(key,invoice);
+    invoice.lines.push({kind:item.openingBill?'opening':'purchase',itemId:item.id,index,amount,description:item.description});groups.set(key,invoice);
   }
   for(const sub of state.subscriptions.filter(s=>s.cardId===cardId))for(const occurrence of subscriptionOccurrences(state,sub,monthAdd(today(),2)).filter(o=>o.chargeDate<=today())){
     const key=occurrence.date.slice(0,7),invoice=groups.get(key)||{month:key,date:occurrence.date,amount:0,lines:[]};
-    invoice.amount+=occurrence.amount;invoice.lines.push({subscriptionId:sub.id,chargeDate:occurrence.chargeDate,amount:occurrence.amount,description:sub.name});groups.set(key,invoice);
+    invoice.amount+=occurrence.amount;invoice.lines.push({kind:'recurring',subscriptionId:sub.id,chargeDate:occurrence.chargeDate,amount:occurrence.amount,description:sub.name});groups.set(key,invoice);
   }
-  return [...groups.values()].sort((a,b)=>a.month.localeCompare(b.month));
+  for(const adjustment of state.cardAdjustments.filter(a=>a.cardId===cardId&&!a.paid)){
+    const key=adjustment.date.slice(0,7),invoice=groups.get(key)||{month:key,date:adjustment.date,amount:0,lines:[]};
+    invoice.date=adjustment.date>invoice.date?adjustment.date:invoice.date;invoice.amount+=adjustment.amount;
+    invoice.lines.push({kind:'adjustment',adjustmentId:adjustment.id,amount:adjustment.amount,description:adjustment.description});groups.set(key,invoice);
+  }
+  return [...groups.values()].filter(i=>i.lines.length).sort((a,b)=>a.month.localeCompare(b.month));
 }
 export function projection(state, from=today(), until=monthAdd(from,6), additions=[]) {
   let balance=cash(state), minimum=balance;

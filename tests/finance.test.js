@@ -41,9 +41,9 @@ test('fatura agrupa parcelas, quitação reduz passivo e não duplica projeção
  s.transactions.push({id:'payment',type:'expense',amount:invoice.amount,accountId:'a',status:'realized',date:'2026-01-10'});
  assert.equal(totalDebt(s),20000);assert.equal(netWorth(s),68999);assert.equal(events(s,'2026-01-01','2026-01-31').length,0);
 });
-test('migrar documento anterior adiciona cartões sem perder contas',()=>{
+test('migrar documento anterior adiciona cartões e ajustes sem perder contas',()=>{
  const previous={schema:1,accounts:[{id:'a',opening:100}]};const next=migrate(previous);
- assert.equal(next.schema,3);assert.deepEqual(next.cards,[]);assert.deepEqual(next.subscriptions,[]);assert.equal(next.accounts[0].opening,100);
+ assert.equal(next.schema,4);assert.deepEqual(next.cards,[]);assert.deepEqual(next.subscriptions,[]);assert.deepEqual(next.cardAdjustments,[]);assert.equal(next.accounts[0].opening,100);
 });
 test('vale-alimentação permanece separado do dinheiro e da renda em conta',()=>{
  const s=initial();s.accounts=[{id:'bank',kind:'checking',opening:100000},{id:'va',kind:'benefit',opening:20000}];
@@ -76,9 +76,34 @@ test('assinatura já cobrada entra uma vez na fatura e desaparece após pagament
  assert.equal(totalDebt(s),0);
  assert.equal(events(s,charge,cardDueDate(s.cards[0],charge)).filter(e=>e.label==='IA').length,0);
 });
-test('backup v3 restaura assinaturas e aceita backup v2',()=>{
+test('backup v4 restaura pagamentos recorrentes e aceita backups antigos',()=>{
  const s=initial();s.subscriptions.push({id:'s',name:'Teste',amount:1000,paid:[]});
  assert.equal(restore(backup(s)).subscriptions[0].name,'Teste');
  const old=restore(JSON.stringify({format:'MyDearMoney',version:2,data:{schema:2,accounts:[{id:'a',opening:500}]}}));
- assert.equal(old.schema,3);assert.deepEqual(old.subscriptions,[]);assert.equal(old.accounts[0].opening,500);
+ assert.equal(old.schema,4);assert.deepEqual(old.subscriptions,[]);assert.deepEqual(old.cardAdjustments,[]);assert.equal(old.accounts[0].opening,500);
+});
+test('fatura separa compras, recorrências e diferenças justificadas sem duplicar o caixa',()=>{
+ const s=initial();s.accounts=[{id:'bank',opening:100000}];s.cards=[{id:'c',closingDay:25,dueDay:5,accountId:'bank'}];
+ s.installments=[{id:'buy',cardId:'c',description:'Coxinha',total:1200,count:1,firstDate:'2026-10-05',accountId:'bank',paid:[]}];
+ s.subscriptions=[{id:'sub',cardId:'c',accountId:'bank',name:'Seguro',amount:3500,firstDate:'2026-09-20',paid:[],active:true}];
+ s.cardAdjustments=[{id:'adj',cardId:'c',date:'2026-10-05',amount:300,description:'Juros anteriores',paid:false}];
+ const invoice=invoices(s,'c').find(i=>i.month==='2026-10');
+ assert.equal(invoice.amount,5000);assert.deepEqual(invoice.lines.map(l=>l.kind),['purchase','recurring','adjustment']);
+ assert.equal(events(s,'2026-09-27','2026-10-05').reduce((sum,e)=>sum+e.amount,0),-5000);
+ for(const line of invoice.lines){if(line.itemId)s.installments[0].paid.push(line.index);if(line.subscriptionId)s.subscriptions[0].paid.push(line.chargeDate);if(line.adjustmentId)s.cardAdjustments[0].paid=true;}
+ s.transactions.push({id:'payment',accountId:'bank',type:'expense',amount:5000,status:'realized',date:'2026-10-05'});
+ assert.equal(accountBalance(s,'bank'),95000);assert.equal(invoices(s,'c').find(i=>i.month==='2026-10'),undefined);
+});
+test('salário calculado pode projetar os meses seguintes sem criar receita presente',()=>{
+ const s=initial();s.accounts=[{id:'bank',opening:0}];s.transactions=[{id:'sal',type:'income',amount:273844,accountId:'bank',date:'2026-09-30',status:'planned',recurrence:{frequency:'monthly'},salaryCalculation:{net:273844}}];
+ assert.equal(accountBalance(s,'bank'),0);
+ assert.deepEqual(events(s,'2026-09-27','2026-11-30').map(e=>[e.date,e.amount]),[['2026-09-30',273844],['2026-10-30',273844],['2026-11-30',273844]]);
+});
+test('parcela e ajuste vencidos entram nos compromissos de agora sem alterar a fatura original',()=>{
+ const s=initial();s.accounts=[{id:'bank',opening:10000}];s.cards=[{id:'c',closingDay:25,dueDay:5,accountId:'bank'}];
+ s.installments=[{id:'old',cardId:'c',accountId:'bank',description:'Compra anterior',total:2000,count:1,firstDate:'2026-09-05',paid:[]}];
+ s.cardAdjustments=[{id:'interest',cardId:'c',date:'2026-09-05',amount:200,description:'Juros do atraso',paid:false}];
+ assert.equal(invoices(s,'c')[0].amount,2200);
+ assert.deepEqual(events(s,'2026-09-27','2026-10-05').map(e=>[e.date,e.amount]).sort((a,b)=>a[1]-b[1]),[['2026-09-27',-2000],['2026-09-27',-200]]);
+ assert.equal(projection(s,'2026-09-27','2026-10-05').end,7800);
 });
