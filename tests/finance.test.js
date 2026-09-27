@@ -117,3 +117,14 @@ test('parcela e ajuste vencidos entram nos compromissos de agora sem alterar a f
  assert.deepEqual(events(s,'2026-09-27','2026-10-05').map(e=>[e.date,e.amount]).sort((a,b)=>a[1]-b[1]),[['2026-09-27',-2000],['2026-09-27',-200]]);
  assert.equal(projection(s,'2026-09-27','2026-10-05').end,7800);
 });
+test('corrigir vínculos de conta e cartão preserva o valor total e move a fatura para o cartão certo',()=>{
+ const s=initial();s.accounts=[{id:'geral',kind:'checking',name:'Conta geral',opening:0},{id:'banco',kind:'checking',name:'Banco',opening:0}];
+ s.cards=[{id:'wrong',accountId:'geral'},{id:'right',accountId:'banco'}];
+ s.transactions=[{id:'salary',accountId:'geral',type:'income',amount:200000,date:'2026-10-05',status:'planned'}];
+ s.installments=[{id:'bill',cardId:'wrong',accountId:'geral',openingBill:true,description:'Saldo inicial',total:18490,count:1,firstDate:'2026-10-10',paid:[]}];
+ const before=projection(s,'2026-09-27','2026-10-31').end;
+ s.transactions[0].accountId='banco';s.installments[0].cardId='right';s.installments[0].accountId='banco';
+ assert.deepEqual(invoices(s,'wrong'),[]);assert.equal(invoices(s,'right')[0].amount,18490);
+ assert.equal(projection(s,'2026-09-27','2026-10-31').end,before);
+ assert.equal(accountBalance(s,'geral'),0);
+});

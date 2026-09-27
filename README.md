@@ -2,12 +2,13 @@
 
 Aplicativo web/PWA de finanças pessoais, local-first e sem conta obrigatória. Esta é a primeira implementação funcional do projeto planejado. Abra em um servidor HTTP, como `npm run serve`, e acesse `http://localhost:4173`. Em produção, hospede os arquivos estáticos por HTTPS (GitHub Pages funciona). Não há dependências de instalação.
 
-## Funciona nesta versão (v0.3.1)
+## Funciona nesta versão (v0.3.2)
 
-- Contas com saldo inicial, entradas, saídas, transferências vinculadas e histórico pesquisável.
+- Contas com saldo inicial, nome e instituição editáveis, entradas, saídas, transferências vinculadas e histórico pesquisável. O saldo é corrigido por conciliação auditável, e a divisão de dinheiro entre bancos é feita por transferência.
 - Interface com quatro destinos principais (Início, Histórico, Futuro e Mais). O registro comum pede apenas valor e categoria; conta, data, recorrência e estado ficam em “Mais opções”.
 - Início com caminhos guiados para cartões, pagamentos recorrentes, salário por hora e vale-alimentação.
 - Múltiplos cartões editáveis, com últimos quatro dígitos opcionais; cada fatura soma compras, parcelas e cobranças recorrentes já efetuadas no cartão. O usuário pode conferir o total com o banco e registrar diferença justificada (juros, atraso, estorno etc.). A entrada de saldo inicial serve apenas para trazer uma fatura antiga sem detalhar suas compras; não cadastre as mesmas compras em duplicidade.
+- É possível trocar a conta de pagamento de um cartão e do empréstimo, mudar a conta de uma entrada ou saída planejada e corrigir o cartão, valor ou vencimento de um saldo inicial de fatura ainda não pago. Esses ajustes preservam o registro e ficam na auditoria.
 - Pagamentos mensais contínuos, como seguro do aluguel, streaming ou IA, em conta ou cartão, com pagamentos registrados e opção de parar previsões futuras. Um seguro anual dividido em um número fixo de parcelas entra como compra parcelada no cartão.
 - Vale-alimentação com conta própria, crédito e uso; seu saldo não infla o dinheiro livre nem o patrimônio líquido.
 - Estimativa de salário por valor/hora, horas, adicional percentual e descontos, seguida de registro explícito como previsto ou recebido, com opção de repetir a estimativa mensalmente. A recorrência usa o mesmo valor e não recalcula horas futuras automaticamente.
