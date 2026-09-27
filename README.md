@@ -2,9 +2,9 @@
 
 Aplicativo web/PWA de finanças pessoais, local-first e sem conta obrigatória. Esta é a primeira implementação funcional do projeto planejado. Abra em um servidor HTTP, como `npm run serve`, e acesse `http://localhost:4173`. Em produção, hospede os arquivos estáticos por HTTPS (GitHub Pages funciona). Não há dependências de instalação.
 
-## Funciona nesta versão (v0.3.2)
+## Funciona nesta versão (v0.3.3)
 
-- Contas com saldo inicial, nome e instituição editáveis, entradas, saídas, transferências vinculadas e histórico pesquisável. O saldo é corrigido por conciliação auditável, e a divisão de dinheiro entre bancos é feita por transferência.
+- Contas com saldo inicial, nome e instituição editáveis, entradas, saídas, transferências vinculadas e histórico pesquisável. O saldo é corrigido por conciliação auditável, que não conta como receita ou despesa do mês; a divisão de dinheiro entre bancos é feita por transferência.
 - Interface com quatro destinos principais (Início, Histórico, Futuro e Mais). O registro comum pede apenas valor e categoria; conta, data, recorrência e estado ficam em “Mais opções”.
 - Início com caminhos guiados para cartões, pagamentos recorrentes, salário por hora e vale-alimentação.
 - Múltiplos cartões editáveis, com últimos quatro dígitos opcionais; cada fatura soma compras, parcelas e cobranças recorrentes já efetuadas no cartão. O usuário pode conferir o total com o banco e registrar diferença justificada (juros, atraso, estorno etc.). A entrada de saldo inicial serve apenas para trazer uma fatura antiga sem detalhar suas compras; não cadastre as mesmas compras em duplicidade.

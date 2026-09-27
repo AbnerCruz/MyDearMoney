@@ -8,6 +8,11 @@ test('transferência conserva o patrimônio e não entra no fluxo',()=>{
  s.transactions=[{id:'1',accountId:'a',type:'transfer-out',amount:30000,status:'realized',date:'2026-09-01'},{id:'2',accountId:'b',type:'transfer-in',amount:30000,status:'realized',date:'2026-09-01'}];
  assert.equal(accountBalance(s,'a'),70000);assert.equal(accountBalance(s,'b'),50000);assert.equal(cash(s),120000);assert.deepEqual(monthlyFlow(s,'2026-09'),{income:0,expense:0});
 });
+test('conciliação corrige o saldo de uma conta sem virar renda ou gasto do mês',()=>{
+ const s=initial();s.accounts=[{id:'bank',kind:'checking',opening:0}];
+ s.transactions=[{id:'adjust',accountId:'bank',type:'income',amount:150000,status:'realized',date:'2026-09-27',category:'Ajuste de saldo',reconciliation:true}];
+ assert.equal(accountBalance(s,'bank'),150000);assert.deepEqual(monthlyFlow(s,'2026-09'),{income:0,expense:0});
+});
 test('compra parcelada projeta sem retirar saldo presente; centavos somam exatamente',()=>{
  const s=initial();s.accounts=[{id:'a',opening:10000}];s.installments=[{id:'p',description:'Compra',total:10001,count:3,firstDate:'2026-01-31',accountId:'a',paid:[]}];
  const e=events(s,'2026-01-01','2026-04-30');assert.deepEqual(e.map(x=>x.date),['2026-01-31','2026-02-28','2026-03-31']);assert.equal(e.reduce((n,x)=>n+x.amount,0),-10001);assert.equal(cash(s),10000);

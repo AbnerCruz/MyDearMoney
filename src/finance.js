@@ -41,7 +41,7 @@ export function netWorth(state) {
   return cash(state)+investmentAccounts+invested+state.assets.reduce((s,a)=>s+a.value,0)-totalDebt(state);
 }
 export function monthlyFlow(state, month=today().slice(0,7)) {
-  const tx=state.transactions.filter(t=>t.status==='realized'&&!t.internal&&state.accounts.find(a=>a.id===t.accountId)?.kind!=='benefit'&&t.date.startsWith(month));
+  const tx=state.transactions.filter(t=>t.status==='realized'&&!t.internal&&!t.reconciliation&&state.accounts.find(a=>a.id===t.accountId)?.kind!=='benefit'&&t.date.startsWith(month));
   return {income:tx.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0), expense:tx.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0)};
 }
 const interval = {daily:1,weekly:7,fortnightly:14};
